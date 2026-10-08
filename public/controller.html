@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#cfcdc6">
+<title>Math Duel — Controller</title>
+<link rel="stylesheet" href="/fonts/fonts.css">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+:root{
+  --soil:#cfcdc6; --soil-2:#c3c1b9; --slab:#dddbd4; --paper:#ecebe6;
+  --ink:#1b1b1a; --ink-2:#4a4944; --ink-3:#7c7a74; --line:rgba(27,27,26,.16); --line-2:rgba(27,27,26,.32);
+  --a:#1b1b1a; --b:#1A4361; --me:var(--a); --bad:#8a4a42;
+  --cell:min(18vh,72px);
+}
+body.slot-B{--me:var(--b)}
+html,body{height:100%;width:100%;background:var(--soil);color:var(--ink);font-family:'Unbounded',system-ui,sans-serif;overflow:hidden;touch-action:none;-webkit-font-smoothing:antialiased}
+input{user-select:text;-webkit-user-select:text}
+.cap{font-size:.62rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  padding:max(env(safe-area-inset-top),22px) max(env(safe-area-inset-right),22px) max(env(safe-area-inset-bottom),22px) max(env(safe-area-inset-left),22px);transition:opacity .25s}
+.screen.hidden{opacity:0;pointer-events:none}
+.brand{font-size:.68rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase}
+
+/* buttons */
+.btn{width:100%;max-width:300px;padding:18px 20px;border:none;border-radius:10px;background:var(--ink);color:var(--paper);font-family:inherit;font-size:.85rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:transform .08s,background .2s}
+.btn:active{transform:scale(.98)}
+.btn.done{background:var(--slab);color:var(--ink);border:1px solid var(--line-2)}
+
+/* join */
+#code-input{width:100%;max-width:300px;padding:16px;text-align:center;letter-spacing:.3em;background:var(--paper);border:1px solid var(--line-2);border-radius:10px;color:var(--ink);font-family:inherit;font-size:1.6rem;font-weight:700;outline:none}
+#code-input:focus{border-color:var(--ink)}
+#code-input::placeholder{color:#b4b2ab}
+#error-msg{min-height:1.2em;font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--bad);text-align:center}
+#error-msg.info{color:var(--ink-3)}
+
+/* lobby */
+.chip{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:var(--me);color:var(--paper);font-weight:800}
+#lobby-chip{width:112px;height:112px;font-size:3.4rem;border-radius:16px}
+#lobby-name{font-size:1rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.dots{display:flex;gap:18px}
+.dot{display:flex;align-items:center;gap:8px;font-size:.6rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.dot i{width:10px;height:10px;border-radius:2px;border:1px solid var(--line-2)}
+.dot.in i{background:var(--ink-3);border-color:var(--ink-3)}
+.dot.ready{color:var(--ink)}
+.dot.ready i{background:var(--ink);border-color:var(--ink)}
+.dot.b.ready i{background:var(--b);border-color:var(--b)}
+
+/* controller */
+#controller-screen{flex-direction:row;justify-content:space-between;align-items:center;gap:12px;
+  padding:max(env(safe-area-inset-top),14px) max(env(safe-area-inset-right),32px) max(env(safe-area-inset-bottom),14px) max(env(safe-area-inset-left),32px)}
+.side{display:flex;flex-direction:column;align-items:center;gap:12px;flex-shrink:0}
+.dpad{display:grid;grid-template-columns:repeat(3,var(--cell));grid-template-rows:repeat(3,var(--cell));gap:5px}
+.dbtn{background:var(--slab);border:1px solid var(--line-2);border-radius:10px;display:flex;align-items:center;justify-content:center;touch-action:none;transition:background .06s,border-color .06s,transform .06s}
+.dbtn svg{width:34%;height:34%;fill:var(--ink-2);transition:fill .06s}
+.dbtn.active{background:var(--me);border-color:var(--me);transform:scale(.96)}
+.dbtn.active svg{fill:var(--paper)}
+.d-up{grid-area:1/2}.d-left{grid-area:2/1}.d-right{grid-area:2/3}.d-down{grid-area:3/2}
+.d-mid{grid-area:2/2;display:flex;align-items:center;justify-content:center}
+.d-mid .chip{width:56%;height:56%;font-size:calc(var(--cell)*.3)}
+
+.fire{width:calc(var(--cell)*2.1);height:calc(var(--cell)*2.1);border-radius:50%;background:var(--slab);border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;touch-action:none;transition:background .06s,transform .06s}
+.fire svg{width:46%;height:46%;stroke:var(--ink);fill:none;stroke-width:2;transition:stroke .06s}
+.fire.active{background:var(--me);border-color:var(--me);transform:scale(.96)}
+.fire.active svg{stroke:var(--paper)}
+#fire-cap{max-width:calc(var(--cell)*2.6);text-align:center;line-height:1.5}
+
+.center{flex:1;min-width:0;max-width:340px;align-self:stretch;display:flex;flex-direction:column;justify-content:center;gap:12px}
+.who{display:flex;align-items:center;gap:10px;font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.who .chip{width:24px;height:24px;font-size:.72rem;border-radius:5px}
+#status{font-size:clamp(.9rem,4.4vh,1.4rem);font-weight:700;line-height:1.25}
+#status.win{color:var(--me)}
+#status.dim{color:var(--ink-3);font-weight:500;font-size:.8rem;letter-spacing:.04em}
+#mlist{display:none;flex-direction:column;gap:5px}
+#mlist.on{display:flex}
+.mrow{padding:9px 12px;border-radius:7px;border:1px solid var(--line);font-size:.66rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .12s,color .12s}
+.mrow.focus{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+
+/* rotate overlay (joystick only) */
+#rotate{display:none;position:fixed;inset:0;z-index:100;background:var(--soil);flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
+#rotate.visible{display:flex}
+#rotate svg{width:74px;height:74px;animation:rot 1.8s ease-in-out infinite}
+@keyframes rot{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(90deg)}}
+#rotate .t{font-size:1rem;font-weight:700}
+
+#banner{position:fixed;top:0;left:0;right:0;z-index:90;display:none;background:var(--ink);color:var(--paper);text-align:center;font-size:.6rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:9px 0}
+</style>
+</head>
+<body>
+
+<div id="banner"></div>
+
+<div id="rotate">
+  <svg viewBox="0 0 100 100"><rect x="32" y="14" width="36" height="62" rx="6" fill="none" stroke="#1b1b1a" stroke-width="4"/><circle cx="50" cy="68" r="2.5" fill="#1b1b1a"/></svg>
+  <div class="t">Rotate your phone</div>
+  <div class="cap">The controller works in landscape</div>
+</div>
+
+<!-- JOIN -->
+<div class="screen" id="join-screen">
+  <div class="brand">Math Duel</div>
+  <div class="cap">Room code</div>
+  <input id="code-input" type="text" maxlength="6" placeholder="000000" autocomplete="off" inputmode="numeric">
+  <div id="error-msg"></div>
+  <button class="btn" id="join-btn">Join</button>
+</div>
+
+<!-- LOBBY -->
+<div class="screen hidden" id="lobby-screen">
+  <div class="brand">Math Duel</div>
+  <div class="chip" id="lobby-chip">A</div>
+  <div id="lobby-name">Player A</div>
+  <div class="dots">
+    <div class="dot a" id="dot-a"><i></i>Player A</div>
+    <div class="dot b" id="dot-b"><i></i>Player B</div>
+  </div>
+  <div class="cap" id="lobby-status">Waiting for the second player…</div>
+  <button class="btn" id="ready-btn">Ready</button>
+</div>
+
+<!-- MESSAGE (replaced / host gone) -->
+<div class="screen hidden" id="msg-screen">
+  <div class="brand">Math Duel</div>
+  <div style="font-size:1.05rem;font-weight:700;text-align:center;max-width:300px;line-height:1.4" id="msg-title"></div>
+  <div class="cap" style="text-align:center;max-width:300px;line-height:1.7" id="msg-sub"></div>
+  <button class="btn" onclick="location.reload()">Reload</button>
+</div>
+
+<!-- JOYSTICK -->
+<div class="screen hidden" id="controller-screen">
+  <div class="side">
+    <div class="dpad">
+      <div class="dbtn d-up" data-dir="up"><svg viewBox="0 0 24 24"><path d="M12 5l8 11H4z"/></svg></div>
+      <div class="dbtn d-left" data-dir="left"><svg viewBox="0 0 24 24"><path d="M5 12l11-8v16z"/></svg></div>
+      <div class="d-mid"><span class="chip slot-letter">A</span></div>
+      <div class="dbtn d-right" data-dir="right"><svg viewBox="0 0 24 24"><path d="M19 12L8 4v16z"/></svg></div>
+      <div class="dbtn d-down" data-dir="down"><svg viewBox="0 0 24 24"><path d="M12 19l-8-11h16z"/></svg></div>
+    </div>
+  </div>
+
+  <div class="center">
+    <div class="who"><span class="chip slot-letter">A</span><span id="who-name">Player A</span></div>
+    <div id="status" class="dim">Waiting for the host…</div>
+    <div id="mlist"></div>
+  </div>
+
+  <div class="side">
+    <div class="fire" id="fire">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 1.5v5M12 17.5v5M1.5 12h5M17.5 12h5"/></svg>
+    </div>
+    <div class="cap" id="fire-cap">Press to select</div>
+  </div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const socket = io({ transports:['websocket'] });
+
+// One phone = one slot: a stable id survives reloads and the QR-preview → Chrome double-open.
+let clientId = null;
+try { clientId = localStorage.getItem('mathduel_client'); } catch(e){}
+if(!clientId){
+  clientId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now().toString(36));
+  try { localStorage.setItem('mathduel_client', clientId); } catch(e){}
+}
+
+let mySlot=null, myCode=null, onJoystick=false, isReady=false, dead=false;
+const buzz = ms => { try{ navigator.vibrate && navigator.vibrate(ms); }catch(e){} };
+
+function showScreen(name){
+  ['join','lobby','msg','controller'].forEach(s => $(s+'-screen').classList.toggle('hidden', s!==name));
+  onJoystick = name==='controller';
+  checkOrientation();
+}
+function banner(msg){ const b=$('banner'); if(msg){ b.textContent=msg; b.style.display='block'; } else b.style.display='none'; }
+
+// ── connection ──
+socket.on('disconnect', () => { if(mySlot && !dead) banner('Connection lost — reconnecting…'); });
+socket.on('connect', () => {
+  if(dead) return;
+  if(mySlot && myCode) socket.emit('rejoin_game', { code:myCode, slot:mySlot, clientId });
+  else tryAutoJoin();
+});
+
+// ── join ──
+const codeInput=$('code-input'), errorMsg=$('error-msg');
+$('join-btn').addEventListener('click', doJoin);
+codeInput.addEventListener('keydown', e => { if(e.key==='Enter') doJoin(); });
+function doJoin(){
+  const code=codeInput.value.trim();
+  if(!/^\d{6}$/.test(code)){ errorMsg.className=''; errorMsg.textContent='Enter 6 digits'; return; }
+  errorMsg.className='info'; errorMsg.textContent='Connecting…';
+  myCode=code;
+  socket.emit('join_game', { code, clientId });
+}
+
+// QR link → join automatically, but only once the page is actually visible
+// (scanner apps open a hidden preview first).
+const urlCode=new URLSearchParams(location.search).get('code');
+const urlValid=urlCode && /^\d{6}$/.test(urlCode);
+if(urlValid){ codeInput.value=urlCode; errorMsg.className='info'; errorMsg.textContent='Connecting…'; }
+let autoTried=false;
+function tryAutoJoin(){
+  if(autoTried || !urlValid || mySlot || !socket.connected) return;
+  if(document.visibilityState!=='visible') return;
+  autoTried=true; doJoin();
+}
+document.addEventListener('visibilitychange', tryAutoJoin);
+
+socket.on('join_error', msg => { errorMsg.className=''; errorMsg.textContent=msg; showScreen('join'); });
+
+socket.on('joined', ({ slot, code, started, ready }) => {
+  banner(null);
+  mySlot=slot; myCode=code;
+  document.body.classList.toggle('slot-B', slot==='B');
+  document.querySelectorAll('.slot-letter').forEach(e=>e.textContent=slot);
+  $('lobby-chip').textContent=slot;
+  $('lobby-name').textContent='Player '+slot;
+  $('who-name').textContent='Player '+slot;
+  if(!started){ setReady(!!ready); showScreen('lobby'); }
+});
+
+socket.on('replaced', () => {
+  dead=true; mySlot=null; banner(null);
+  $('msg-title').textContent='Controller is open in another tab';
+  $('msg-sub').textContent='This phone is already playing in another window.';
+  showScreen('msg'); socket.disconnect();
+});
+socket.on('host_disconnected', () => {
+  dead=true; banner(null);
+  $('msg-title').textContent='The game screen disconnected';
+  $('msg-sub').textContent='Create a new game on the big screen and scan the QR code again.';
+  showScreen('msg');
+});
+
+// ── lobby ──
+const readyBtn=$('ready-btn');
+function setReady(v){ isReady=v; readyBtn.textContent=v?'You’re ready':'Ready'; readyBtn.classList.toggle('done', v); }
+readyBtn.addEventListener('click', () => { if(isReady) return; buzz(15); setReady(true); socket.emit('player_ready', { code:myCode }); });
+
+socket.on('game_event', ({ event, data }) => {
+  if(event!=='lobby_ready_update') return;
+  ['A','B'].forEach(s => { const d=$('dot-'+s.toLowerCase()); d.classList.toggle('in', data[s]); d.classList.toggle('ready', data[s]&&data['ready'+s]); });
+  const other = mySlot==='A' ? 'B' : 'A';
+  $('lobby-status').textContent = !data[other] ? 'Waiting for the second player…'
+    : !isReady ? 'Both here — press Ready'
+    : data['ready'+other] ? 'Starting…' : 'Waiting for your opponent…';
+});
+
+socket.on('game_start', () => { showScreen('controller'); });
+socket.on('back_to_lobby', () => { setReady(false); renderUI(null); showScreen('lobby'); });
+
+// ── mirror of the big screen ──
+socket.on('host_ui', renderUI);
+function renderUI(ui){
+  const st=$('status'), ml=$('mlist');
+  if(!ui){ st.className='dim'; st.textContent='Waiting for the host…'; ml.classList.remove('on'); $('fire-cap').textContent='Press to select'; return; }
+  if(ui.items){
+    st.className='dim';
+    st.textContent = ui.menu==='level' ? 'Choose a level' : 'What next?';
+    ml.innerHTML = ui.items.map((t,i)=>`<div class="mrow${i===ui.focus?' focus':''}">${t}</div>`).join('');
+    ml.classList.add('on');
+  } else {
+    ml.classList.remove('on');
+    const s = ui.status && ui.status[mySlot];
+    if(s){ st.className = s.tone==='win' ? 'win' : ''; st.textContent = s.text; }
+  }
+  $('fire-cap').textContent = ui.caption || '';
+}
+
+// ── D-pad ──
+const held=new Set();
+function press(dir,btn){ if(held.has(dir)) return; held.add(dir); btn.classList.add('active'); buzz(8); socket.emit('ctrl_input',{ dir, pressed:true }); }
+function release(dir,btn){ if(!held.has(dir)) return; held.delete(dir); btn.classList.remove('active'); socket.emit('ctrl_input',{ dir, pressed:false }); }
+document.querySelectorAll('.dbtn').forEach(btn => {
+  const dir=btn.dataset.dir;
+  btn.addEventListener('touchstart', e=>{ e.preventDefault(); press(dir,btn); }, { passive:false });
+  btn.addEventListener('touchend',   e=>{ e.preventDefault(); release(dir,btn); }, { passive:false });
+  btn.addEventListener('touchcancel',e=>{ e.preventDefault(); release(dir,btn); }, { passive:false });
+  btn.addEventListener('mousedown',  e=>{ e.preventDefault(); press(dir,btn); });
+  btn.addEventListener('mouseup',    ()=>release(dir,btn));
+  btn.addEventListener('mouseleave', ()=>release(dir,btn));
+});
+function releaseAll(){ document.querySelectorAll('.dbtn').forEach(b=>release(b.dataset.dir,b)); fire.classList.remove('active'); }
+window.addEventListener('blur', releaseAll);
+
+// ── Fire / select ──
+const fire=$('fire');
+function fireDown(e){ e.preventDefault(); if(fire.classList.contains('active')) return; fire.classList.add('active'); buzz(15); socket.emit('ctrl_fire'); }
+function fireUp(e){ e.preventDefault(); fire.classList.remove('active'); }
+fire.addEventListener('touchstart', fireDown, { passive:false });
+fire.addEventListener('touchend', fireUp, { passive:false });
+fire.addEventListener('touchcancel', fireUp, { passive:false });
+fire.addEventListener('mousedown', fireDown);
+fire.addEventListener('mouseup', fireUp);
+fire.addEventListener('mouseleave', fireUp);
+
+// ── landscape gate, joystick only ──
+function checkOrientation(){
+  const portrait = matchMedia('(orientation: portrait)').matches;
+  $('rotate').classList.toggle('visible', portrait && onJoystick);
+  if(portrait) releaseAll();
+}
+matchMedia('(orientation: portrait)').addEventListener('change', checkOrientation);
+addEventListener('resize', checkOrientation);
+checkOrientation();
+</script>
+</body>
+</html>
