@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#cfcdc6">
 <title>Math Duel — Controller</title>
-<link rel="stylesheet" href="/fonts/fonts.css">
+<link rel="stylesheet" href="fonts/fonts.css">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 :root{
@@ -154,10 +154,10 @@ input{user-select:text;-webkit-user-select:text}
   </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
+<script>window.__SC_BASE=location.pathname.replace(/[^/]*$/,'');</script><script src="socket.io/socket.io.js"></script>
 <script>
 const $ = id => document.getElementById(id);
-const socket = io({ transports:['websocket'] });
+const socket = io({path:window.__SC_BASE+'socket.io',transports:['websocket']});
 
 // One phone = one slot: a stable id survives reloads and the QR-preview → Chrome double-open.
 let clientId = null;

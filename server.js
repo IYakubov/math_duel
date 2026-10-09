@@ -33,13 +33,21 @@ function lanIp() {
   return pref || 'localhost';
 }
 
-function joinBase(hostHeader) {
-  const h = (hostHeader || '').toLowerCase();
+// Public address of this game, e.g. https://sharedcouch.online/mathduel
+// (the Shared Couch front door sends X-Forwarded-Proto / -Host / -Prefix).
+function publicPrefix(h) {
+  return String(h['x-forwarded-prefix'] || '').split(',')[0].trim().replace(/\/+$/, '');
+}
+function publicProto(h) {
+  return String(h['x-forwarded-proto'] || 'http').split(',')[0].trim();
+}
+function joinBase(headers) {
+  const h = String(headers['x-forwarded-host'] || headers.host || '').split(',')[0].trim().toLowerCase();
   const hostname = h.replace(/:\d+$/, '');
   if (!h || hostname === 'localhost' || hostname.startsWith('127.') || hostname === '[::1]') {
     return `http://${lanIp()}:${PORT}`;
   }
-  return `http://${h}`;
+  return `${publicProto(headers)}://${h}${publicPrefix(headers)}`;
 }
 
 async function qrSvgFor(url) {
@@ -175,7 +183,7 @@ io.on('connection', (socket) => {
     socket.data.code = code;
     socket.data.isHost = true;
     socket.join(code);
-    const joinUrl = `${joinBase(socket.handshake.headers.host)}/controller?code=${code}`;
+    const joinUrl = `${joinBase(socket.handshake.headers)}/controller?code=${code}`;
     let qrSvg = '';
     try { qrSvg = await qrSvgFor(joinUrl); } catch (e) { console.warn('QR failed', e.message); }
     console.log(`[${code}] room created — join: ${joinUrl}`);
