@@ -1,4 +1,4 @@
-# Math Duel — v2.1 (Shared Couch restyle, English UI)
+# Math Duel — v2.2 (Shared Couch restyle, English UI)
 
 Two players race to solve arithmetic on a big screen, using their phones as controllers.
 v2 uses the Tank War design: Unbounded font, a grayscale soil/ink palette, a lobby that
@@ -32,7 +32,7 @@ Menus ignore input for 0.9 s after opening, so a held button doesn't skip throug
 ## Files
 
 - `server.js`: rooms, slots, LAN QR code, input relay.
-- `public/host.html`: the big screen. Sounds are embedded as base64.
+- `public/host.html`: the big screen. Sounds are embedded as base64. The background track (`math.mp3`, 2:17) loops from the countdown until the end screen.
 - `public/controller.html`: the phone (join, lobby, joystick, mirrored menu).
 - `public/index.html`: landing page.
 - `public/fonts/`: Unbounded variable font (SIL OFL, `OFL.txt`).
