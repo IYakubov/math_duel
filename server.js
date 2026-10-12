@@ -241,6 +241,22 @@ io.on('connection', (socket) => {
     io.to(room.hostSocketId).emit('ctrl_fire', { slot });
   });
 
+  // Phone's menu button → host toggles its pause menu.
+  socket.on('ctrl_menu', () => {
+    const room = rooms[socket.data.code];
+    const slot = socket.data.slot;
+    if (!room || !slot || room.players[slot] !== socket.id) return;
+    io.to(room.hostSocketId).emit('ctrl_menu', { slot });
+  });
+
+  // Host is leaving for the game catalog.
+  socket.on('host_exit', () => {
+    const code = socket.data.code;
+    const room = rooms[code];
+    if (!room || room.hostSocketId !== socket.id) return;
+    socket.to(code).emit('host_exit');
+  });
+
   socket.on('disconnect', () => {
     const code = socket.data.code;
     const room = code && rooms[code];

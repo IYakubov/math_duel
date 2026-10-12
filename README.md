@@ -1,4 +1,4 @@
-# Math Duel — v2.2 (Shared Couch restyle, English UI)
+# Math Duel — v2.3 (Shared Couch restyle, English UI)
 
 Two players race to solve arithmetic on a big screen, using their phones as controllers.
 v2 uses the Tank War design: Unbounded font, a grayscale soil/ink palette, a lobby that
@@ -22,12 +22,24 @@ phones on the same Wi-Fi can scan it directly.
 3. When both are ready, the phones switch to the joystick and the screen shows **Choose a level**.
    The arrows move the highlight and the round button selects. Either phone can drive it.
 4. A 3-2-1 countdown, then 10 questions of 8 s each. The D-pad picks a tile.
-   Picks stay hidden until time runs out, then both are revealed with their times.
-   The fastest correct answer scores.
+   A pick shows at once as a ring in the player's colour (A black, B navy) with an A/B tag.
+   If both pick the same tile, the second player's ring goes around the first one's.
+   When time runs out the correct tile fills bright green with a shine, and time chips
+   show who picked what. The fastest correct answer scores.
 5. **End screen:** Play again / Change level / Back to lobby, driven from the phones.
    "Back to lobby" keeps the phones connected and resets ready state and score.
 
 Menus ignore input for 0.9 s after opening, so a held button doesn't skip through them.
+
+## Menu button
+
+Every phone has a **Menu** button (top-right of the joystick). The big screen also has one
+(bottom-right corner, clickable), and **Esc** works too. It pauses the game (the timer
+and music stop) and shows **Resume / Back to lobby / Game catalog**, driven from the phones.
+- **Back to lobby** keeps the phones connected and returns them to the Ready screen.
+- **Game catalog** sends the big screen to the Shared Couch catalog (`/#games` behind the
+  front door, or `https://sharedcouch.online/#games` when the game runs on its own).
+  Phones are told the host left and to scan the next game's QR code.
 
 ## Files
 
@@ -52,6 +64,8 @@ Menus ignore input for 0.9 s after opening, so a held button doesn't skip throug
 | ctrl_fire | phone→host | `{slot}`: selects in menus |
 | host_ui | host→server→phones | `{phase, menu, items, focus, status:{A,B}, caption}` |
 | host_back_to_lobby → back_to_lobby | host→server→phones | |
+| ctrl_menu | phone→host | `{slot}`: toggles the pause menu |
+| host_exit | host→server→phones | host left for the game catalog |
 | player_joined, player_left, host_disconnected | server→clients | |
 
 The slot is taken from the server-side socket, never from the payload. Each phone keeps

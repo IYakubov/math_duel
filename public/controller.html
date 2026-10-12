@@ -78,6 +78,10 @@ input{user-select:text;-webkit-user-select:text}
 .mrow{padding:9px 12px;border-radius:7px;border:1px solid var(--line);font-size:.66rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .12s,color .12s}
 .mrow.focus{background:var(--ink);border-color:var(--ink);color:var(--paper)}
 
+/* menu button (top-right of the joystick) */
+#menu-btn{position:absolute;top:max(env(safe-area-inset-top),12px);right:max(env(safe-area-inset-right),16px);display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;border:1px solid var(--line-2);background:var(--slab);font-family:inherit;font-size:.56rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);touch-action:none;transition:background .06s,color .06s}
+#menu-btn svg{width:14px;height:14px;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+#menu-btn.active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
 /* rotate overlay (joystick only) */
 #rotate{display:none;position:fixed;inset:0;z-index:100;background:var(--soil);flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px}
 #rotate.visible{display:flex}
@@ -125,11 +129,12 @@ input{user-select:text;-webkit-user-select:text}
   <div class="brand">Math Duel</div>
   <div style="font-size:1.05rem;font-weight:700;text-align:center;max-width:300px;line-height:1.4" id="msg-title"></div>
   <div class="cap" style="text-align:center;max-width:300px;line-height:1.7" id="msg-sub"></div>
-  <button class="btn" onclick="location.reload()">Reload</button>
+  <button class="btn" id="msg-btn" onclick="location.reload()">Reload</button>
 </div>
 
 <!-- JOYSTICK -->
 <div class="screen hidden" id="controller-screen">
+  <button id="menu-btn" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Menu</button>
   <div class="side">
     <div class="dpad">
       <div class="dbtn d-up" data-dir="up"><svg viewBox="0 0 24 24"><path d="M12 5l8 11H4z"/></svg></div>
@@ -229,7 +234,15 @@ socket.on('replaced', () => {
   $('msg-sub').textContent='This phone is already playing in another window.';
   showScreen('msg'); socket.disconnect();
 });
+socket.on('host_exit', () => {
+  dead=true; banner(null);
+  $('msg-title').textContent='The big screen went back to the game catalog';
+  $('msg-sub').textContent='Pick the next game there and scan its QR code.';
+  $('msg-btn').style.display='none';
+  showScreen('msg');
+});
 socket.on('host_disconnected', () => {
+  if(dead) return;
   dead=true; banner(null);
   $('msg-title').textContent='The game screen disconnected';
   $('msg-sub').textContent='Create a new game on the big screen and scan the QR code again.';
@@ -260,7 +273,7 @@ function renderUI(ui){
   if(!ui){ st.className='dim'; st.textContent='Waiting for the host…'; ml.classList.remove('on'); $('fire-cap').textContent='Press to select'; return; }
   if(ui.items){
     st.className='dim';
-    st.textContent = ui.menu==='level' ? 'Choose a level' : 'What next?';
+    st.textContent = ui.menu==='level' ? 'Choose a level' : ui.menu==='pause' ? 'Paused' : 'What next?';
     ml.innerHTML = ui.items.map((t,i)=>`<div class="mrow${i===ui.focus?' focus':''}">${t}</div>`).join('');
     ml.classList.add('on');
   } else {
@@ -297,6 +310,15 @@ fire.addEventListener('touchcancel', fireUp, { passive:false });
 fire.addEventListener('mousedown', fireDown);
 fire.addEventListener('mouseup', fireUp);
 fire.addEventListener('mouseleave', fireUp);
+
+// ── Menu button → pause menu on the big screen ──
+const menuBtn=$('menu-btn');
+function menuDown(e){ e.preventDefault(); menuBtn.classList.add('active'); buzz(15); socket.emit('ctrl_menu'); }
+function menuUp(e){ e.preventDefault(); menuBtn.classList.remove('active'); }
+menuBtn.addEventListener('touchstart', menuDown, { passive:false });
+menuBtn.addEventListener('touchend', menuUp, { passive:false });
+menuBtn.addEventListener('mousedown', menuDown);
+menuBtn.addEventListener('mouseup', menuUp);
 
 // ── landscape gate, joystick only ──
 function checkOrientation(){
