@@ -157,7 +157,7 @@ function bindPhone(socket, code, clientId, hintSlot) {
 function sendJoined(socket, room, slot) {
   socket.emit('joined', { slot, code: socket.data.code, started: room.started, ready: room.ready[slot] });
   if (room.started) {
-    socket.emit('game_start');
+    socket.emit('game_start', { players: room.active || ['A', 'B'] });
     if (room.ui) socket.emit('host_ui', room.ui);
   }
 }
@@ -203,6 +203,7 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || room.hostSocketId !== socket.id) return;
     room.started = false;
+    room.active = null;
     room.ready = { A: false, B: false };
     room.ui = null;
     io.to(code).emit('back_to_lobby');
@@ -222,8 +223,24 @@ io.on('connection', (socket) => {
     broadcastLobby(code);
     if (!room.started && room.players.A && room.players.B && room.ready.A && room.ready.B) {
       room.started = true;
-      io.to(code).emit('game_start');
+      room.active = ['A', 'B'];
+      io.to(code).emit('game_start', { players: room.active });
     }
+  });
+
+  // One phone alone in the room can start a 1-player game.
+  socket.on('player_solo', () => {
+    const code = socket.data.code;
+    const room = rooms[code];
+    const slot = socket.data.slot;
+    if (!room || !slot || room.players[slot] !== socket.id || room.started) return;
+    const other = slot === 'A' ? 'B' : 'A';
+    if (room.players[other]) return;
+    room.ready[slot] = true;
+    room.started = true;
+    room.active = [slot];
+    broadcastLobby(code);
+    io.to(code).emit('game_start', { players: room.active });
   });
 
   socket.on('ctrl_input', ({ dir, pressed } = {}) => {

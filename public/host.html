@@ -153,6 +153,22 @@ body{display:grid;grid-template-rows:auto 6px 1fr}
 #menu-btn svg{width:16px;height:16px;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
 #p-pause{z-index:85;background:rgba(207,205,198,.94);backdrop-filter:blur(3px)}
 #p-pause .mi{cursor:pointer}
+/* survival: lives */
+.lives{display:flex;gap:5px;margin-top:2px}
+.pl.right .lives{justify-content:flex-end}
+.heart{width:clamp(14px,1.5vw,20px);height:clamp(14px,1.5vw,20px);transition:opacity .3s,transform .3s}
+.heart path{fill:currentColor}
+.pl.left .heart{color:var(--a)}.pl.right .heart{color:var(--b)}
+.heart.lost{opacity:.18}
+.heart.break{animation:hbreak .6s ease-out}
+@keyframes hbreak{0%{transform:scale(1)}30%{transform:scale(1.5) rotate(-12deg)}60%{transform:scale(.8) rotate(8deg)}100%{transform:scale(1)}}
+#pace{font-size:clamp(.55rem,.9vw,.7rem);font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+body.solo .pl.right{visibility:hidden}
+.rc-l{font-size:.62rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;opacity:.7}
+.rc.solo{width:min(40vw,320px);align-items:center;text-align:center}
+.best{font-size:.66rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.best b{color:var(--ink)}
+.newbest{display:inline-block;margin-left:8px;padding:3px 8px;border-radius:4px;background:var(--win);color:#0f3a12}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:60;background:var(--ink);color:var(--paper);font-size:.66rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:10px 16px;border-radius:6px;opacity:0;transition:opacity .25s;pointer-events:none}
 #toast.show{opacity:1}
 </style>
@@ -164,17 +180,19 @@ body{display:grid;grid-template-rows:auto 6px 1fr}
     <div class="pl-meta">
       <div class="pl-name"><span class="sw a"></span>Player A</div>
       <div class="pl-state" id="st1">Thinking…</div>
+      <div class="lives" id="lv1"></div>
     </div>
     <div class="pl-score" id="sc1">0</div>
   </div>
   <div class="mid">
-    <div id="qbadge">Question 1 / 10</div>
-    <div id="progress"></div>
+    <div id="qbadge">Question 1</div>
+    <div id="pace">8.0 s to answer</div>
   </div>
   <div class="pl right">
     <div class="pl-meta">
       <div class="pl-name"><span class="sw b"></span>Player B</div>
       <div class="pl-state" id="st2">Thinking…</div>
+      <div class="lives" id="lv2"></div>
     </div>
     <div class="pl-score" id="sc2">0</div>
   </div>
@@ -202,6 +220,7 @@ body{display:grid;grid-template-rows:auto 6px 1fr}
     <div class="slot" id="slot-A"><span class="sw a">A</span><div class="slot-t"><span class="slot-n">Player A</span><span class="slot-s">Waiting</span></div></div>
     <div class="slot" id="slot-B"><span class="sw b">B</span><div class="slot-t"><span class="slot-n">Player B</span><span class="slot-s">Waiting</span></div></div>
   </div>
+  <div class="hint">Playing alone? Press <b style="color:var(--ink)">&nbsp;Play solo&nbsp;</b> on your phone</div>
   <div id="join-url"></div>
 </section>
 
@@ -259,9 +278,15 @@ function startBgMusic(){ if(bgMusic) return; if(!bgBuffer){ initAudio().then(()=
 function stopBgMusic(){ if(bgMusic){ try{bgMusic.stop();}catch(e){} bgMusic=null; } }
 
 // ── Constants ──
-const TOTAL_Q = 10;
-const ROUND_TIME = 8000;   // ms per question
-const REVEAL_TIME = 3000;  // ms the answer stays on screen
+const LIVES = 3;          // survival: lives per player
+const START_TIME = 8000;  // ms for the first question
+const MIN_TIME = 3000;    // fastest the timer gets
+const TIME_STEP = 250;    // ms taken off per question
+const HEART='<svg class="heart" viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.7 4.5c2.1 0 3.6 1.1 5.3 3 1.7-1.9 3.2-3 5.3-3 3.7 0 5.8 3.9 4.3 7.3C19.5 16.4 12 21 12 21z"/></svg>';
+let active=[true,true];   // who is playing (solo = only one)
+let lives=[LIVES,LIVES];
+let curRound=START_TIME, revealTimer=null;
+const REVEAL_TIME = 2500;  // ms the answer stays on screen
 const MENU_LOCK = 900;     // ms input lock after a menu opens
 const DIRS = ['up','down','left','right'];
 const LEVELS = [
@@ -285,6 +310,7 @@ const $ = id => document.getElementById(id);
 const tiles = {}; DIRS.forEach(d => tiles[d] = { el:$('tile-'+d), val:$('val-'+d), picks:$('tile-'+d).querySelector('.picks') });
 
 function later(fn, ms){ const t={ fn, due:performance.now()+ms }; t.id=setTimeout(()=>{ timers=timers.filter(x=>x!==t); fn(); }, ms); timers.push(t); return t; }
+function cancelLater(t){ if(!t) return; clearTimeout(t.id); timers=timers.filter(x=>x!==t); }
 function clearTimers(){ timers.forEach(t=>clearTimeout(t.id)); timers=[]; cancelAnimationFrame(timerRAF); }
 function showPanel(id){ ['p-lobby','p-level','p-end'].forEach(p => $(p).classList.toggle('on', p===id)); }
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2600); }
@@ -316,12 +342,17 @@ socket.on('player_left', ({ slot }) => { if(phase!=='lobby') toast(`Player ${slo
 socket.on('player_joined', ({ slot }) => { if(phase!=='lobby') toast(`Player ${slot} is back`); });
 
 // Both phones ready → phones switch to the joystick, host opens the level menu.
-socket.on('game_start', () => { if(phase==='lobby') openLevelMenu(); });
+socket.on('game_start', (info) => {
+  if(phase!=='lobby') return;
+  const pl=(info && info.players) || ['A','B'];
+  active=[pl.includes('A'), pl.includes('B')];
+  openLevelMenu();
+});
 
 socket.on('ctrl_input', ({ slot, dir, pressed }) => {
   if(!pressed) return;
   if(menu) return menuMove(dir);
-  if(phase==='question') handleChoice(slot==='A'?0:1, dir);
+  if(phase==='question' && active[slot==='A'?0:1]) handleChoice(slot==='A'?0:1, dir);
 });
 socket.on('ctrl_fire', () => { if(menu) menuSelect(); });
 socket.on('ctrl_menu', () => { paused ? closePause() : openPause(); });
@@ -377,7 +408,7 @@ let paused=null;
 function openPause(){
   if(paused) return;
   const now=performance.now();
-  paused={ at:now, prevMenu:menu, rem:timers.map(t=>({ fn:t.fn, ms:Math.max(0,t.due-now) })) };
+  paused={ at:now, prevMenu:menu, rem:timers.map(t=>({ fn:t.fn, ms:Math.max(0,t.due-now), reveal:t===revealTimer })) };
   timers.forEach(t=>clearTimeout(t.id)); timers=[]; cancelAnimationFrame(timerRAF);
   musicGain.gain.value=0;
   const items=[{ label:'Resume', action:()=>closePause() }];
@@ -396,7 +427,7 @@ function closePause(){
   const now=performance.now();
   timerStart += now-p.at;
   menu=p.prevMenu; if(menu){ menu.openedAt=now; renderMenu(); }
-  p.rem.forEach(r=>later(r.fn, r.ms));
+  p.rem.forEach(r=>{ const t=later(r.fn, r.ms); if(r.reveal) revealTimer=t; });
   if(phase==='question') animateTimer();
   pushUI(lastUI);
 }
@@ -423,10 +454,11 @@ function backToLobby(){
 // ── Game flow ──
 function startGame(){
   closeMenu(); clearTimers();
-  scores=[0,0]; qIndex=0;
+  scores=[0,0]; qIndex=0; lives=[LIVES,LIVES];
   $('sc1').textContent='0'; $('sc2').textContent='0';
+  document.body.classList.toggle('solo', active.filter(Boolean).length===1);
+  renderLives();
   showPanel(null);
-  buildProgress();
   startBgMusic();
   countdown(3);
 }
@@ -435,7 +467,7 @@ function countdown(n){
   phase='countdown';
   resetTiles();
   $('qlabel').textContent='Get ready';
-  $('qbadge').textContent=`Question 1 / ${TOTAL_Q}`;
+  $('qbadge').textContent='Question 1'; $('pace').textContent=`${(START_TIME/1000).toFixed(1)} s to answer`;
   $('timer-fill').style.width='0';
   $('result').classList.remove('show');
   setState(0,'—'); setState(1,'—');
@@ -448,8 +480,14 @@ function countdown(n){
   step(n);
 }
 
-function buildProgress(){ $('progress').innerHTML = Array.from({length:TOTAL_Q},()=>'<div class="pseg"></div>').join(''); }
-function updateProgress(){ $('progress').querySelectorAll('.pseg').forEach((d,i)=>d.className='pseg'+(i<qIndex?' done':i===qIndex?' cur':'')); }
+function renderLives(breakIdx){
+  [0,1].forEach(p=>{
+    const el=$(p===0?'lv1':'lv2');
+    el.innerHTML=Array.from({length:LIVES},(_,i)=>HEART).join('');
+    el.querySelectorAll('.heart').forEach((h,i)=>{ if(i>=lives[p]) h.classList.add('lost'); if(breakIdx && breakIdx[p] && i===lives[p]) h.classList.add('break'); });
+  });
+}
+const livesText = n => n===1 ? '1 life left' : `${n} lives left`;
 function setState(p, text, done){ const el=$(p===0?'st1':'st2'); el.textContent=text; el.classList.toggle('done', !!done); }
 
 function resetTiles(){
@@ -477,19 +515,20 @@ function fitExpr(){ const el=$('qexpr'); el.style.fontSize=''; const max=$('qbox
 function fmt(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
 
 function nextQuestion(){
-  if(qIndex>=TOTAL_Q) return endGame();
   phase='question';
+  curRound=Math.max(MIN_TIME, START_TIME - qIndex*TIME_STEP);
   choice=[null,null]; choiceTime=[null,null];
   resetTiles();
   $('result').classList.remove('show');
   setState(0,'Thinking…'); setState(1,'Thinking…');
+  [0,1].forEach(p=>{ if(!active[p]) choice[p]=null; });
 
   const q=generateQuestion();
   currentAnswer=q.answer; qText=q.expr;
   $('qlabel').textContent='Solve';
   $('qexpr').className=''; $('qexpr').textContent=`${q.expr} = ?`; fitExpr();
-  $('qbadge').textContent=`Question ${qIndex+1} / ${TOTAL_Q}`;
-  updateProgress();
+  $('qbadge').textContent=`Question ${qIndex+1}`;
+  $('pace').textContent=`${(curRound/1000).toFixed(1)} s to answer`;
 
   const shuffled=[...DIRS].sort(()=>Math.random()-.5);
   correctDir=shuffled[0];
@@ -501,16 +540,16 @@ function nextQuestion(){
   const wr=[...wrongs];
   shuffled.forEach((dir,i)=>{ tiles[dir].value = i===0 ? currentAnswer : wr[i-1]; tiles[dir].val.textContent = fmt(tiles[dir].value); fitTo(tiles[dir].val, tiles[dir].el.clientWidth-64); });
 
-  pushUI({ status:{A:{text:'Answer now!'},B:{text:'Answer now!'}}, caption:'Use the arrows' });
+  pushUI({ status:{A:active[0]?{text:'Answer now!'}:null,B:active[1]?{text:'Answer now!'}:null}, caption:'Use the arrows' });
 
   timerStart=performance.now();
   animateTimer();
-  later(revealAnswer, ROUND_TIME);
+  revealTimer=later(revealAnswer, curRound);
 }
 
 function animateTimer(){
   if(phase!=='question') return;
-  const frac=Math.max(0,1-(performance.now()-timerStart)/ROUND_TIME);
+  const frac=Math.max(0,1-(performance.now()-timerStart)/curRound);
   const f=$('timer-fill'); f.style.width=(frac*100)+'%'; f.classList.toggle('low', frac<.25);
   if(frac>0) timerRAF=requestAnimationFrame(animateTimer);
 }
@@ -534,6 +573,7 @@ function handleChoice(p, dir){
   setState(p,'Answered', true);
   const st={A:null,B:null}; st[p===0?'A':'B']={text:'Answer locked'};
   pushUI({ status:st, caption:'Waiting for the other player' });
+  if([0,1].every(q=>!active[q] || choice[q]!==null)){ cancelLater(revealTimer); revealTimer=later(revealAnswer, 450); }
 }
 
 function revealAnswer(){
@@ -543,10 +583,12 @@ function revealAnswer(){
   $('timer-fill').style.width='0';
   playAnswerSound();
 
+  cancelLater(revealTimer); revealTimer=null;
   const ok=[choice[0]===correctDir, choice[1]===correctDir];
-  let win=-1;
-  if(ok[0]&&ok[1]) win = choiceTime[0]<=choiceTime[1] ? 0 : 1;
-  else if(ok[0]) win=0; else if(ok[1]) win=1;
+  const lost=[false,false];
+  [0,1].forEach(p=>{ if(!active[p]) return; if(ok[p]) scores[p]++; else { lives[p]=Math.max(0,lives[p]-1); lost[p]=true; } });
+  renderLives(lost);
+  const win=-2; // no single round winner in survival
 
   Object.entries(tiles).forEach(([dir,t])=>{
     t.el.classList.add(dir===correctDir?'cor':'dim');
@@ -555,7 +597,7 @@ function revealAnswer(){
   [0,1].forEach(p=>{
     if(choice[p]===null) return;
     const chip=document.createElement('span');
-    chip.className='pick'+(p===1?' b':'')+(win===p?' win':'');
+    chip.className='pick'+(p===1?' b':'')+(ok[p]?' win':'');
     chip.innerHTML=`<b>${p===0?'A':'B'}</b>${(choiceTime[p]/1000).toFixed(2)} s`;
     tiles[choice[p]].picks.appendChild(chip);
   });
@@ -563,31 +605,56 @@ function revealAnswer(){
   $('qlabel').textContent='Answer';
   $('qexpr').innerHTML=`${qText} = <span class="ans">${fmt(currentAnswer)}</span>`; fitExpr();
 
-  if(win>=0){ scores[win]++; const el=$(win===0?'sc1':'sc2'); el.textContent=scores[win]; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
-  [0,1].forEach(p=>setState(p, choice[p]===null ? 'No answer' : win===p ? '+1 point' : ok[p] ? 'Right, but slower' : 'Wrong', win===p));
+  [0,1].forEach(p=>{
+    if(!active[p]) return;
+    if(ok[p]){ const el=$(p===0?'sc1':'sc2'); el.textContent=scores[p]; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
+    setState(p, ok[p] ? 'Correct' : lives[p]===0 ? 'Out!' : (choice[p]===null ? 'No answer · ' : 'Wrong · ')+livesText(lives[p]), ok[p]);
+  });
 
+  const solo = active.filter(Boolean).length===1;
+  const who = [0,1].filter(p=>active[p]);
   const r=$('result');
-  if(win<0) r.innerHTML = `No point this round <span class="sub">· answer ${fmt(currentAnswer)}</span>`;
-  else r.innerHTML = `<span class="sw ${win===0?'a':'b'}"></span>Player ${win===0?'A':'B'} scores <span class="sub">· ${(choiceTime[win]/1000).toFixed(2)} s</span>`;
+  if(who.every(p=>ok[p])) r.innerHTML = solo ? `Correct <span class="sub">· ${(choiceTime[who[0]]/1000).toFixed(2)} s</span>` : `Both correct <span class="sub">· answer ${fmt(currentAnswer)}</span>`;
+  else if(who.every(p=>!ok[p])) r.innerHTML = solo ? `${choice[who[0]]===null?'Too slow':'Wrong'} <span class="sub">· answer ${fmt(currentAnswer)} · ${livesText(lives[who[0]])}</span>` : `Both lose a life <span class="sub">· answer ${fmt(currentAnswer)}</span>`;
+  else { const l=who.find(p=>!ok[p]); r.innerHTML = `<span class="sw ${l===0?'a':'b'}"></span>Player ${l===0?'A':'B'} loses a life <span class="sub">· answer ${fmt(currentAnswer)}</span>`; }
   r.classList.add('show');
 
-  const phoneStatus = p => ({ text: choice[p]===null ? 'Time’s up' : win===p ? '+1 point' : ok[p] ? 'Right, but slower' : 'Wrong', tone: win===p ? 'win' : '' });
+  const phoneStatus = p => !active[p] ? null : ({ text: ok[p] ? 'Correct!' : lives[p]===0 ? 'Out!' : `${choice[p]===null?'Time’s up':'Wrong'} — ${livesText(lives[p])}`, tone: ok[p] ? 'win' : '' });
   pushUI({ status:{A:phoneStatus(0),B:phoneStatus(1)}, caption:`Answer: ${fmt(currentAnswer)}` });
 
   qIndex++;
-  later(nextQuestion, REVEAL_TIME);
+  const over = who.some(p=>lives[p]===0);
+  later(over ? endGame : nextQuestion, over ? REVEAL_TIME+400 : REVEAL_TIME);
 }
 
 function endGame(){
   phase='end'; clearTimers(); stopBgMusic(); playAnswerSound();
-  const w = scores[0]>scores[1] ? 0 : scores[1]>scores[0] ? 1 : -1;
-  $('end-title').textContent = w<0 ? 'Draw' : `Player ${w===0?'A':'B'} wins`;
-  $('end-cards').innerHTML = [0,1].map(p=>`
-    <div class="rc ${w===p?'win':''} ${p===1?'b':''}">
-      <div class="rc-n"><span class="sw ${p===0?'a':'b'}"></span>Player ${p===0?'A':'B'}</div>
-      <div class="rc-s">${scores[p]}</div>
-      <div class="rc-w">${w===p?'Winner':w<0?'Draw':''}</div>
-    </div>`).join('');
+  const who=[0,1].filter(p=>active[p]);
+  if(who.length===1){
+    const p=who[0], key='mathduel_best_'+levelIdx;
+    let best=0; try{ best=parseInt(localStorage.getItem(key)||'0',10)||0; }catch(e){}
+    const isNew=scores[p]>best; if(isNew){ best=scores[p]; try{ localStorage.setItem(key,String(best)); }catch(e){} }
+    $('end-title').textContent='Game over';
+    $('end-cards').innerHTML=`
+      <div class="rc solo ${p===1?'b':''}">
+        <div class="rc-n"><span class="sw ${p===0?'a':'b'}"></span>Player ${p===0?'A':'B'} · ${LEVELS[levelIdx].name}</div>
+        <div class="rc-s">${scores[p]}</div>
+        <div class="rc-l">correct ${scores[p]===1?'answer':'answers'}</div>
+        <div class="best">Best <b>${best}</b>${isNew&&best>0?'<span class="newbest">New best</span>':''}</div>
+      </div>`;
+    pushUI({ status:{A:p===0?{text:`${scores[p]} correct`,tone:'win'}:null,B:p===1?{text:`${scores[p]} correct`,tone:'win'}:null} });
+  } else {
+    // last one standing; if both fall on the same question, more correct answers wins
+    let w = lives[0]>0 && lives[1]===0 ? 0 : lives[1]>0 && lives[0]===0 ? 1 : scores[0]>scores[1] ? 0 : scores[1]>scores[0] ? 1 : -1;
+    $('end-title').textContent = w<0 ? 'Draw' : `Player ${w===0?'A':'B'} wins`;
+    $('end-cards').innerHTML = [0,1].map(p=>`
+      <div class="rc ${w===p?'win':''} ${p===1?'b':''}">
+        <div class="rc-n"><span class="sw ${p===0?'a':'b'}"></span>Player ${p===0?'A':'B'}</div>
+        <div class="rc-s">${scores[p]}</div>
+        <div class="rc-l">correct · ${livesText(lives[p])}</div>
+        <div class="rc-w">${w===p?'Last one standing':w<0?'Draw':''}</div>
+      </div>`).join('');
+  }
   const items=[
     { label:'Play again',    action:()=>startGame() },
     { label:'Change level', action:()=>openLevelMenu() },
